@@ -1,4 +1,3 @@
-
 # Google Speech data feature extraction
 
 # Note that the 'testing_list.txt' and 'validation_list.txt'
@@ -43,6 +42,15 @@ LABELMAP30 = {
     'up': 28, 'wow': 29, 'yes': 30, 'zero': 31
 }
 
+LABELMAP36 = {
+    'voxceleb': 0, 'backward': 1, 'bed': 2, 'bird': 3, 'cat': 4, 'dog': 5,
+    'down': 6, 'eight': 7, 'five': 8, 'follow': 9,
+    'forward': 10, 'four': 11, 'go': 12, 'happy': 13, 
+    'house': 14, 'learn': 15, 'left': 16, 'marvin': 17, 'nine': 18, 'no': 19,
+    'off': 20, 'on': 21, 'one': 22, 'right': 23, 'seven': 24, 'sheila': 25,
+    'six': 26, 'stop': 27, 'three': 28, 'tree': 29, 'two': 30,
+    'up': 31, 'visual': 32, 'wow': 33, 'yes': 34, 'zero': 35
+}
 
 LABELMAP13 = {
     'go': 1, 'no': 2, 'on': 3, 'up': 4, 'bed': 5, 'cat': 6,
@@ -88,7 +96,7 @@ def createFileList(audioFileDir, testingList,
     '''
     dirs = os.listdir(audioFileDir)
     dirs = [x for x in dirs if os.path.isdir(os.path.join(audioFileDir, x))]
-    assert(len(dirs) == 31), (len(dirs))
+    # assert(len(dirs) == 31), (len(dirs))
     for x in dirs:
         msg = '%s found without label map' % x
         assert x in labelMap, msg
@@ -100,11 +108,20 @@ def createFileList(audioFileDir, testingList,
             continue
         path = audioFileDir + '/' + fol + '/'
         files = []
-        for w in os.listdir(path):
-            if not w.endswith('.wav'):
-                print("Ignoring %s" % w)
-                continue
-            files.append(fol + '/' + w)
+        if fol == 'voxceleb':
+            file_list = os.listdir(path)
+            file_list = random.sample(file_list, 50000)
+            for w in file_list:
+                if not w.endswith('.wav'):
+                    print("Ignoring %s" % w)
+                    continue
+                files.append(fol + '/' + w)            
+        else:
+            for w in os.listdir(path):
+                if not w.endswith('.wav'):
+                    print("Ignoring %s" % w)
+                    continue
+                files.append(fol + '/' + w)
         allFileList.extend(files)
     assert(len(allFileList) == len(set(allFileList)))
 
@@ -133,7 +150,7 @@ def createFileList(audioFileDir, testingList,
 
 
 def extractFeatures(fileList, LABELMAP, maxlen, numFilt, samplerate, winlen,
-                    winstep):
+                    winstep, noise_data=None):
     '''
     Reads audio from files specified in fileList, extracts features and assigns
     labels to them.
@@ -172,11 +189,22 @@ def extractFeatures(fileList, LABELMAP, maxlen, numFilt, samplerate, winlen,
     assert(fileList.ndim == 1)
     allSamples = np.zeros((len(fileList), maxlen))
     i = 0
-    for i,file in enumerate(fileList):
-        _, x = r.read(file)
-        assert(len(x) <= maxlen)
-        allSamples[i, maxlen - len(x):maxlen] += x
-        i += 1
+    if noise_data is None:
+        for i,file in enumerate(fileList):
+            _, x = r.read(file)
+            x = x[:maxlen]
+            assert(len(x) <= maxlen), '%s: %d' % (file, len(x)) 
+            allSamples[i, maxlen - len(x):maxlen] += x
+            i += 1
+    else:
+        for i,file in enumerate(fileList):
+            _, x = r.read(file)
+            x = x[:maxlen]
+            assert(len(x) <= maxlen), '%s: %d' % (file, len(x)) 
+
+            allSamples[i, maxlen - len(x):maxlen] += x
+            i += 1
+
     assert allSamples.ndim == 2
     winstepSamples = winstep * samplerate
     winlenSamples = winlen * samplerate
@@ -202,6 +230,17 @@ def extractFeatures(fileList, LABELMAP, maxlen, numFilt, samplerate, winlen,
     y = to_onehot(np.array(y), np.max(y) + 1)
     return x, y
 
+
+def getNoiseData(noiseDir):
+    data = []
+    files = os.listdir(noiseDir)
+    for f in files:
+        if not f.endswith('.wav'):
+            continue
+        _, audio = r.read(os.path.join(noiseDir, f))
+        data.append(audio[:maxlen])
+    return np.array(data)
+
 if __name__=='__main__':
     # ----------------------------------------- #
     # Configuration
@@ -212,19 +251,21 @@ if __name__=='__main__':
     samplerate = 16000
     winlen = 0.025
     winstep = 0.010
+    add_noise = False
     # 13 for google 13, 11 for google 12
     numLabels = 13 # 0 not assigned
     samplerate=16000
     # For creation of training file list, testing file list
-    # and validation list. 
+    # and validation list.
     audioFileDir = './GoogleSpeech/Raw/'
     testingList = './GoogleSpeech/Raw/testing_list.txt'
     validationList = './GoogleSpeech/Raw/validation_list.txt'
     outDir = './GoogleSpeech/Extracted/'
+    noiseDir = './data/backgroundNoise/'
     # ----------------------------------------- #
     np.random.seed(seed)
     random.seed(seed)
-    assert(numLabels in [13, 11])
+    assert(numLabels in [13, 11, 36])
     if numLabels == 13:
         values = [LABELMAP13[x] for x in LABELMAP13]
         values = set(values)
@@ -235,8 +276,16 @@ if __name__=='__main__':
         values = set(values)
         assert(len(values) == 11)
         LABELMAP = LABELMAP12
+    if numLabels == 36:
+        values = [LABELMAP36[x] for x in LABELMAP36]
+        values = set(values)
+        assert(len(values) == 36)
+        LABELMAP = LABELMAP36
 
     print("Peforming file creation")
+    noise_data = None
+    if add_noise:
+        noise_data = getNoiseData(noiseDir)
     createFileList(audioFileDir, testingList, validationList,
                    outDir, LABELMAP)
     trainFileList = np.load(outDir + 'file_train.npy')
@@ -261,5 +310,3 @@ if __name__=='__main__':
     print("Shape train", x_train.shape, y_train.shape)
     print("Shape test", x_test.shape, y_test.shape)
     print("Shape val", x_val.shape, y_val.shape)
-
-

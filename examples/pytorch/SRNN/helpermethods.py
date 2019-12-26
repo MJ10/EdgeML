@@ -43,7 +43,7 @@ def getSRNN2Args():
                         help='Hidden dimension of upper layer RNN cell.')
     parser.add_argument('-bz', '--brick-size', type=checkIntPos, required=True,
                         help='Brick size to be used at the lower layer.')
-    parser.add_argument('-c', '--cell-type', default='LSTM',
+    parser.add_argument('-c', '--cell-type', default='FastGRNN',
                         help='Type of RNN cell to use among [LSTM, FastRNN, ' +
                         'FastGRNN')
 
@@ -58,7 +58,7 @@ def getSRNN2Args():
     parser.add_argument('-b', '--batch-size', type=checkIntPos, default=128,
                         help='Batch size for each pass.')
     parser.add_argument('-r', '--learning-rate', type=checkFloatPos,
-                        default=0.01,
+                        default=0.5,
                         help='Learning rate for ADAM Optimizer.')
 
     parser.add_argument('-pS', '--print-step', type=int, default=200,
