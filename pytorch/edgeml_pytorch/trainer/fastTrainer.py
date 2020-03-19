@@ -53,7 +53,7 @@ class FastTrainer:
         
 
         self.RNN = FastGRNNCUDA(16, 32, gate_nonlinearity="sigmoid",
-                                update_nonlinearity="tanh", zetaInit=100.0, nuInit=-100.0, batch_first=False)
+                                update_nonlinearity="tanh", zetaInit=100.0, nuInit=-100.0, batch_first=True)
 
         # 
         # BaseRNN(self.FastObj, bidirectional=True).to(self.device)
